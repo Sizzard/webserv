@@ -44,6 +44,40 @@ int set_socket_flags(int fd)
     return SUCCES;
 }
 
+std::string get_time()
+{
+    std::string result;
+
+    time_t rawtime;
+    struct tm *timeinfo;
+    char buffer[80];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer, 80, "Date: %a, %d %b %G %T %Z\n", timeinfo);
+    result = buffer;
+
+    return result;
+}
+
+std::string header_generator(int bodyLength)
+{
+    std::string header("HTTP/1.1 ");
+
+    header += "200 OK\n";
+    header += "Server: WebServ 1.0\n";
+    header += get_time();
+    header += "Content-Type: text/html\n";
+    header += "Content-Length: ";
+
+    std::stringstream ss;
+
+    ss << bodyLength;
+
+    header += ss.str();
+
+    return header;
+}
+
 int main(int ac, char **av, char **ev)
 {
     check_args(ac, ev);
@@ -99,7 +133,7 @@ int main(int ac, char **av, char **ev)
                 {
                     int clientSocket = accept(servSocket, NULL, NULL);
 
-                    std::cout << "New client detected" << std::endl;
+                    std::cout << green << "New client detected" << reset << std::endl;
 
                     clientSockets.push_back(clientSocket);
 
@@ -111,30 +145,23 @@ int main(int ac, char **av, char **ev)
                     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientSocket, &client_event);
                     char dataRecv[3000] = {0};
                     recv(clientSocket, dataRecv, 3000, 0);
-                    std::cout << "Donnees recues :" << std::endl
-                              << dataRecv << std::endl;
-
-                    std::cout << "Sending index.html" << std::endl;
+                    std::cout << "Data received :" << yellow << std::endl
+                              << dataRecv << reset << std::endl;
 
                     std::ifstream index("site/index.html");
 
-                    std::string bodySent;
+                    std::string body;
 
-                    std::getline(index, bodySent, '\0');
+                    std::getline(index, body, '\0');
 
                     index.close();
 
-                    std::string header;
+                    std::string header = header_generator(body.length());
 
-                    header = "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: ";
+                    std::string wholeResponse = header + "\r\n\r\n" + body;
 
-                    std::stringstream ss;
-
-                    ss << bodySent.length();
-
-                    header += ss.str();
-
-                    std::string wholeResponse = header + "\n\n" + bodySent;
+                    std::cout << "Sending :\n"
+                              << wholeResponse << std::endl;
 
                     write(clientSocket, wholeResponse.c_str(), wholeResponse.size());
                 }
