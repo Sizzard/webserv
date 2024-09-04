@@ -15,6 +15,16 @@ int main(void)
 
     send(clientSocket, message.c_str(), message.length(), 0);
 
+    listen(clientSocket, 5);
+
+    accept(clientSocket, NULL, NULL);
+
+    char buffer[3000] = {0};
+
+    recv(clientSocket, buffer, 3000, 0);
+
+    std::cout << buffer << std::endl;
+
     close(clientSocket);
 
     return 0;
