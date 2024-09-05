@@ -9,11 +9,13 @@
 #include <poll.h>
 #include <sys/epoll.h>
 #include <vector>
+#include <map>
 #include <csignal>
 #include <arpa/inet.h>
 #include <cstdlib>
 #include <stdio.h>
 #include <fstream>
+#include <regex>
 
 const std::string red("\033[1;31m");
 const std::string green("\033[1;32m");
@@ -23,5 +25,8 @@ const std::string cyan("\033[1;36m");
 const std::string magenta("\033[1;35m");
 const std::string reset("\033[0m");
 
-#define SUCCES 0
+#define SUCCESS 0
 #define FAILURE 1
+
+#define OK 200
+#define BAD_RQST 400

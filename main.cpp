@@ -41,7 +41,106 @@ int set_socket_flags(int fd)
         perror("fctnl");
         return FAILURE;
     }
-    return SUCCES;
+    return SUCCESS;
+}
+
+std::vector<std::string> split(std::string const &line)
+{
+    std::string word;
+    std::vector<std::string> v;
+
+    size_t begin = 0;
+    size_t end = 0;
+
+    for (size_t i = 0; end != std::string::npos; i++)
+    {
+        begin = line.find_first_not_of(" ", i);
+        end = line.find_first_of(" ", begin);
+        if (begin > line.length())
+            break;
+        word = line.substr(begin, end - begin);
+        v.push_back(word);
+        i = end;
+    }
+    return v;
+}
+
+int is_valid_method(std::string const &line)
+{
+    if (line.compare("GET") == 0)
+    {
+        // std::cout << "TEST 2 " << std::endl;
+        return 200;
+    }
+    else if (line.compare("POST") == 0)
+    {
+        return 200;
+    }
+    else if (line.compare("DELETE") == 0)
+    {
+        return 200;
+    }
+    return 400;
+}
+
+int is_valid_path(std::string const &line)
+{
+    if (line[0] != '/')
+    {
+        return 200;
+    }
+    return 400;
+}
+
+int is_valid_protocol(std::string const &line)
+{
+    if (line.compare("HTTP/1.0") == 0 || line.compare("HTTP/1.1") == 0)
+    {
+        return 200;
+    }
+    else if (line.compare("HTTP/") == 0 )
+    {
+        
+    }
+    return 400;
+}
+
+int parse_first_line(std::string const &line)
+{
+    std::vector<std::string> v = split(line);
+
+    if (is_valid_method(v[0]) != 200)
+    {
+        return FAILURE;
+    }
+    else if (is_valid_path(v[1]) != 200)
+    {
+        return FAILURE;
+    }
+    else if (is_valid_protocol(v[2]) != 200)
+    {
+        return FAILURE;
+    }
+
+    return SUCCESS;
+}
+
+int parsing_header(char *dataRecv)
+{
+    std::string data = dataRecv;
+    std::string line;
+    std::map<std::string, std::string> headers;
+
+    std::stringstream ss;
+    ss << data;
+    std::getline(ss, line);
+
+    if (parse_first_line(line) == false)
+    {
+        std::cout << "Ceci est une bad request" << std::endl;
+        return FAILURE;
+    }
+    return SUCCESS;
 }
 
 std::string get_time()
@@ -85,6 +184,9 @@ int main(int ac, char **av, char **ev)
     std::signal(SIGINT, signal_handler);
 
     int servSocket = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+
+    setsockopt(servSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     sockaddr_in servAddr;
 
@@ -147,23 +249,35 @@ int main(int ac, char **av, char **ev)
                     recv(clientSocket, dataRecv, 3000, 0);
                     std::cout << "Data received :" << yellow << std::endl
                               << dataRecv << reset << std::endl;
+                    if (dataRecv[0] == 0)
+                    {
+                        continue;
+                    }
+                    else if (parsing_header(dataRecv) == FAILURE)
+                    {
+                        // 400 Bad Request connection closed;
+                        // exit(1);
+                    }
+                    else
+                    {
 
-                    std::ifstream index("site/index.html");
+                        std::ifstream index("site/index.html");
 
-                    std::string body;
+                        std::string body;
 
-                    std::getline(index, body, '\0');
+                        std::getline(index, body, '\0');
 
-                    index.close();
+                        index.close();
 
-                    std::string header = header_generator(body.length());
+                        std::string header = header_generator(body.length());
 
-                    std::string wholeResponse = header + "\r\n\r\n" + body;
+                        std::string wholeResponse = header + "\r\n\r\n" + body;
 
-                    std::cout << "Sending :\n"
-                              << wholeResponse << std::endl;
+                        std::cout << "Sending :\n"
+                                  << wholeResponse << std::endl;
 
-                    write(clientSocket, wholeResponse.c_str(), wholeResponse.size());
+                        write(clientSocket, wholeResponse.c_str(), wholeResponse.size());
+                    }
                 }
             }
         }
