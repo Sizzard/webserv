@@ -1,29 +1,31 @@
-#include <vector>
-#include <iostream>
-#include <cstdlib>
-#include <string>
-#include <regex>
+#include "Includes/webserv.hpp"
 
 int main(void)
 {
-    char buffer[50] = "";
-    std::string line = buffer;
-    std::string word;
-    std::vector<std::string> v;
-    std::regex test;
+    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
 
-    size_t begin = 0;
-    size_t end = 0;
+    sockaddr_in servAddr;
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(8080);
+    servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    for (size_t i = 0; end != std::string::npos; i++)
-    {
-        begin = line.find_first_not_of(" ", i);
-        end = line.find_first_of(" ", begin);
-        if (begin > line.length())
-            break;
-        word = line.substr(begin, end - begin);
-        v.push_back(word);
-        i = end;
-    }
+    connect(clientSocket, (struct sockaddr *)&servAddr, sizeof(servAddr));
+
+    std::string message = "Je suis le client !";
+
+    send(clientSocket, message.c_str(), message.length(), 0);
+
+    listen(clientSocket, 5);
+
+    accept(clientSocket, NULL, NULL);
+
+    char buffer[3000] = {0};
+
+    recv(clientSocket, buffer, 3000, 0);
+
+    std::cout << buffer << std::endl;
+
+    close(clientSocket);
+
     return 0;
 }

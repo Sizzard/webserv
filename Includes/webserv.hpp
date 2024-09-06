@@ -15,7 +15,6 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <fstream>
-#include <regex>
 
 const std::string red("\033[1;31m");
 const std::string green("\033[1;32m");
