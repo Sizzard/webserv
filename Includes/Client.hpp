@@ -1,6 +1,7 @@
 #pragma once
 
 #include "webserv.hpp"
+#include "DefaultErrorPages.hpp"
 
 class Client
 {
@@ -16,6 +17,8 @@ public:
     void reinitialize_client();
 
     int _fd;
+    int _dataSize;
+    bool _isVacant;
     bool _isValidRequest;
     std::string _method;
     std::string _path;
@@ -23,3 +26,5 @@ public:
     std::map<std::string, std::string> _header;
     std::string _body;
 };
+
+void assign_client(std::vector<Client> &clients, Client const &client);

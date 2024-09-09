@@ -1,4 +1,3 @@
-#include "Includes/webserv.hpp"
 #include "Includes/Client.hpp"
 
 bool g_sigint = false;
@@ -96,13 +95,14 @@ int is_valid_path(std::string const &line)
 
 int is_valid_protocol(std::string const &line)
 {
-    if (line.compare("HTTP/1.0\r") == 0 || line.compare("HTTP/1.0\r\n") == 0 || line.compare("HTTP/1.0\n") == 0 || line.compare("HTTP/1.1\r") == 0 || line.compare("HTTP/1.1\r\n") == 0 || line.compare("HTTP/1.1\n") == 0)
+    if (line.compare("HTTP/1.0\r") == 0 || line.compare("HTTP/1.0\r\n") == 0 || line.compare("HTTP/1.0\n") == 0 || line.compare("HTTP/1.0") == 0 || line.compare("HTTP/1.1\r") == 0 || line.compare("HTTP/1.1\r\n") == 0 || line.compare("HTTP/1.1\n") == 0 || line.compare("HTTP/1.1") == 0)
     {
         return 200;
     }
     else if (line.compare("HTTP/") == 0)
     {
     }
+    std::cout << line << std::endl;
     return 400;
 }
 
@@ -155,38 +155,20 @@ int parsing_header(Client &client, char *dataRecv)
     return SUCCESS;
 }
 
-std::string get_time()
+void add_new_client(std::vector<Client> &clients, int const &servSocket, int epoll_fd)
 {
-    std::string result;
+    int clientSocket = accept(servSocket, NULL, NULL);
 
-    time_t rawtime;
-    struct tm *timeinfo;
-    char buffer[80];
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-    strftime(buffer, 80, "Date: %a, %d %b %G %T %Z\n", timeinfo);
-    result = buffer;
+    std::cout << green << "New client detected on socket " << clientSocket << reset << std::endl;
+    clients.resize(clients.size() + 1);
+    assign_client(clients, Client(clientSocket));
 
-    return result;
-}
+    set_socket_flags(clientSocket);
 
-std::string header_generator(int bodyLength)
-{
-    std::string header("HTTP/1.1 ");
-
-    header += "200 OK\n";
-    header += "Server: WebServ 1.0\n";
-    header += get_time();
-    header += "Content-Type: text/html\n";
-    header += "Content-Length: ";
-
-    std::stringstream ss;
-
-    ss << bodyLength;
-
-    header += ss.str();
-
-    return header;
+    epoll_event client_event;
+    client_event.data.fd = clientSocket;
+    client_event.events = EPOLLIN | EPOLLET | EPOLLOUT | EPOLLHUP | EPOLLRDHUP;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientSocket, &client_event);
 }
 
 int main(int ac, char **av, char **ev)
@@ -225,7 +207,7 @@ int main(int ac, char **av, char **ev)
     struct epoll_event event;
 
     event.data.fd = servSocket;
-    event.events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLHUP | EPOLLRDHUP;
+    event.events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP;
 
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, servSocket, &event) == -1)
     {
@@ -236,6 +218,7 @@ int main(int ac, char **av, char **ev)
     std::vector<epoll_event> events(500);
     std::vector<Client> clients(5);
     char dataRecv[8001] = {0};
+    DefaultErrorPages defaultErrorPages;
 
     while (g_sigint == false)
     {
@@ -246,19 +229,78 @@ int main(int ac, char **av, char **ev)
         {
             std::memset(dataRecv, 0, sizeof(dataRecv));
 
-            if (events[i].events & EPOLLHUP)
+            if (events[i].events & EPOLLRDHUP)
             {
-                std::cout << "EPOLLHUP\n" << red << "Closing connection on socket : " << clientID << reset << std::endl;
+                std::cout << red << "EPOLLRDHUP\n"
+                          << "Closing connection on socket : " << clientID << reset << std::endl;
                 close(clientID);
+                clients[clientID].reinitialize_client();
+                continue;
             }
-            else if (events[i].events & EPOLLRDHUP)
+            if (events[i].events & EPOLLIN)
             {
-                std::cout << "EPOLLRDHUP\n" << red << "Closing connection on socket : " << clientID << reset << std::endl;
-                close(clientID);
+                std::cout << green << "EPOLLIN" << reset << std::endl;
+
+                if (clientID == servSocket)
+                {
+                    add_new_client(clients, servSocket, epoll_fd);
+                }
+                else
+                {
+                    clients[clientID]._dataSize = recv(clientID, dataRecv, 8001, 0);
+                    std::cout << "dataSize : " << clients[clientID]._dataSize << std::endl;
+                    if (clients[clientID]._dataSize == -1)
+                    {
+                        ;
+                    }
+                    else if (clients[clientID]._dataSize == 0)
+                    {
+                        std::cout << red << "Client disconnected" << reset << std::endl;
+                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, clientID, NULL);
+                        close(clientID);
+                        clients[clientID].reinitialize_client();
+                    }
+                    else if (clients[clientID]._dataSize > 8000)
+                    {
+                        std::cout << red << "400 Bad Request on socket : " << clientID << reset << std::endl;
+
+                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, clientID, NULL);
+                        close(clientID);
+                        clients[clientID].reinitialize_client();
+                    }
+                    else
+                    {
+                        std::cout << "Data received :" << yellow << std::endl
+                                  << dataRecv << reset << std::endl;
+                    }
+                }
             }
-            else if (events[i].events & EPOLLOUT)
+            if (events[i].events & EPOLLOUT)
             {
-                std::cout << "EPOLLOUT" << std::endl;
+                std::cout << cyan << "EPOLLOUT" << reset << std::endl;
+
+                std::string header;
+                std::string body;
+                std::string wholeResponse;
+
+                if (clients[clientID]._dataSize == -1 || dataRecv[0] == 0)
+                {
+                    continue;
+                }
+                else if (parsing_header(clients[clientID], dataRecv) == FAILURE)
+                {
+                    body = defaultErrorPages.get_page(400);
+                    header = header_generator("400 Bad Request\n", body.length());
+                    wholeResponse = header + "\r\n\r\n" + body;
+
+                    std::cout
+                        << "Sending to Socket " << clientID << " :\n"
+                        << red << wholeResponse << reset << std::endl;
+                    write(clientID, wholeResponse.c_str(), wholeResponse.size());
+                    std::cout << red << "Closing connection on socket : " << clientID << reset << std::endl;
+                    close(clientID);
+                    clients[clientID].reinitialize_client();
+                }
 
                 if (clients[clientID]._isValidRequest == true)
                 {
@@ -266,70 +308,19 @@ int main(int ac, char **av, char **ev)
 
                     std::ifstream index("html/index.html");
 
-                    std::string body;
-
                     std::getline(index, body, '\0');
 
                     index.close();
 
-                    std::string header = header_generator(body.length());
+                    header = header_generator("200 OK\n", body.length());
 
-                    std::string wholeResponse = header + "\r\n\r\n" + body;
+                    wholeResponse = header + "\r\n\r\n" + body;
 
                     std::cout << "Sending to Socket " << clientID << " :\n"
                               << cyan << wholeResponse << reset << std::endl;
 
                     write(clientID, wholeResponse.c_str(), wholeResponse.size());
                     clients[clientID].reinitialize_client();
-                }
-            }
-            else if (events[i].events & EPOLLIN)
-            {
-                std::cout << "EPOLLIN" << std::endl;
-
-                if (clientID == servSocket)
-                {
-                    int clientSocket = accept(servSocket, NULL, NULL);
-
-                    std::cout << green << "New client detected on socket " << clientSocket << reset << std::endl;
-                    clients.resize(clients.size() + 1);
-                    clientID = clientSocket;
-                    clients[clientID]._fd = clientSocket;
-                    clients[clientID].reinitialize_client();
-                    set_socket_flags(clientSocket);
-
-                    epoll_event client_event;
-                    client_event.data.fd = clientSocket;
-                    client_event.events = EPOLLIN | EPOLLET | EPOLLOUT | EPOLLHUP | EPOLLRDHUP;
-                    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientSocket, &client_event);
-                    int dataSize = recv(clientSocket, dataRecv, 8001, 0);
-                    std::cout << "dataSize : " << dataSize << std::endl;
-                    if (dataSize == -1)
-                    {
-                        continue;
-                    }
-                    else if (dataSize == 0)
-                    {
-                        std::cout << red << "Client disconnected" << reset << std::endl;
-                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, clientSocket, NULL);
-                        close(clientSocket);
-                    }
-                    else if (dataSize > 8000)
-                    {
-                        std::cout << "400 Bad Request on socket : " << clientID << std::endl;
-                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, clientSocket, NULL);
-                        close(clientID);
-                    }
-                    else
-                    {
-                        std::cout << "Data received :" << yellow << std::endl
-                                  << dataRecv << reset << std::endl;
-                        if (parsing_header(clients[clientID], dataRecv) == FAILURE)
-                        {
-                            std::cout << "400 Bad Request on socket : " << std::endl;
-                            close(clientID);
-                        }
-                    }
                 }
             }
         }

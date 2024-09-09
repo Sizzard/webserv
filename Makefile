@@ -1,7 +1,7 @@
 CPPFLAGS = -Wall -Wextra -Werror -std=c++98 -g3
 
 NAME = webserv
-SRC = Client.cpp\
+SRC = Client.cpp Header.cpp DefaultErrorPages.cpp\
 	main.cpp
 OBJ = $(SRC:.cpp=.o)
 

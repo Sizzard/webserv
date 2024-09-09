@@ -32,3 +32,5 @@ const std::string reset("\033[0m");
 #define BAD_RQST 400
 
 #define clientID events[i].data.fd
+
+std::string header_generator(std::string const &code, size_t bodyLength);
