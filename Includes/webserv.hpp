@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <string>
+#include <cstring>
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -29,3 +30,5 @@ const std::string reset("\033[0m");
 
 #define OK 200
 #define BAD_RQST 400
+
+#define clientID events[i].data.fd

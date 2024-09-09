@@ -1,11 +1,11 @@
 #include "Includes/Client.hpp"
 
-Client::Client()
+Client::Client() : _fd(0), _isValidRequest(false)
 {
     return;
 }
 
-Client::Client(int fd) : _fd(fd)
+Client::Client(int fd) : _fd(fd), _isValidRequest(false)
 {
     return;
 }
@@ -26,4 +26,14 @@ Client &Client::operator=(Client const &cpy)
 Client::~Client()
 {
     return;
+}
+
+void Client::reinitialize_client()
+{
+    this->_method.clear();
+    this->_path.clear();
+    this->_protocol.clear();
+    this->_header.clear();
+    this->_body.clear();
+    this->_isValidRequest = false;
 }
